@@ -29,7 +29,6 @@ export default function LoginPage() {
   const [confirm,  setConfirm]  = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
-  const [success,  setSuccess]  = useState("");
   const [checking, setChecking] = useState(true);
 
   // If already logged in → go home
@@ -41,7 +40,7 @@ export default function LoginPage() {
   }, [router]);
 
   function clearForm() {
-    setError(""); setSuccess("");
+    setError("");
     setEmail(""); setPassword(""); setConfirm("");
   }
 
@@ -73,16 +72,20 @@ export default function LoginPage() {
         router.push("/auth/callback");
       }
     } else {
-      const { error } = await supabase.auth.signUp({
-        email, password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) {
-        setError(error.message);
+      // Sign up
+      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+      // Immediately sign in after signup — no confirmation needed
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        setError(signInError.message);
         setLoading(false);
       } else {
-        setSuccess("✅ Account created! Check your email for a confirmation link, then sign in.");
-        setLoading(false);
+        router.push("/auth/callback");
       }
     }
   }
@@ -151,11 +154,7 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            {success && (
-              <div style={{ background:"rgba(74,222,128,0.08)", border:`1px solid ${C.success}40`, borderRadius:8, padding:"10px 13px", fontSize:13, color:C.success, marginBottom:14, lineHeight:1.6 }}>
-                {success}
-              </div>
-            )}
+
 
             {/* Email */}
             <div style={{ marginBottom:12 }}>
