@@ -193,8 +193,8 @@ export default function SellPage(){
   return(
     <>
       <Head>
-        <title>Sell a Book — KitabBazar Nepal</title>
-        <meta name="description" content="List your used books for sale on KitabBazar. Reach buyers across Nepal for free." />
+        <title>Sell a Book — KitabSathi Nepal</title>
+        <meta name="description" content="List your used books for sale on KitabSathi. Reach buyers across Nepal for free." />
       </Head>
       <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"system-ui, sans-serif" }}>
         <Navbar />

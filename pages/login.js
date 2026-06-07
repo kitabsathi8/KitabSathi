@@ -1,5 +1,5 @@
-// pages/login.js  —  Real Google Sign In via Supabase Auth
-// ─────────────────────────────────────────────────────────────────
+// pages/login.js — Simplified: Email/Password + Google
+// ─────────────────────────────────────────────────────
 
 import { useState, useEffect } from "react";
 import Head from "next/head";
@@ -8,19 +8,31 @@ import { useRouter } from "next/router";
 import { supabase } from "../lib/supabase";
 
 const C = {
-  bg: "#0D1117", navBg: "#161B22", cardBg: "#161B22",
-  border: "#30363D", primary: "#4CC9E8", primaryDark: "#0D1117",
-  text: "#E6EDF3", muted: "#8B949E", subtext: "#C9D1D9",
-  error: "#F87171", success: "#4ADE80",
+  bg:"#0D1117", navBg:"#161B22", cardBg:"#161B22",
+  border:"#30363D", primary:"#4CC9E8", primaryDark:"#0D1117",
+  text:"#E6EDF3", muted:"#8B949E", subtext:"#C9D1D9",
+  error:"#F87171", success:"#4ADE80",
 };
 
-export default function LoginPage() {
-  const router  = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
-  const [checking,setChecking]= useState(true);
+const mkInput = (err) => ({
+  width:"100%", background:C.bg,
+  border:`1.5px solid ${err ? C.error : C.border}`,
+  color:C.text, borderRadius:8, padding:"12px 14px",
+  fontSize:14, outline:"none", fontFamily:"system-ui, sans-serif",
+});
 
-  // If user is already logged in, redirect to home
+export default function LoginPage() {
+  const router = useRouter();
+  const [mode,     setMode]     = useState("signin"); // "signin" | "signup"
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm,  setConfirm]  = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [success,  setSuccess]  = useState("");
+  const [checking, setChecking] = useState(true);
+
+  // If already logged in → go home
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) router.push("/");
@@ -28,29 +40,67 @@ export default function LoginPage() {
     });
   }, [router]);
 
-  async function handleGoogleSignIn() {
-    setLoading(true);
-    setError("");
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    }
-    // On success: browser auto-redirects to Google — nothing more needed here
+  function clearForm() {
+    setError(""); setSuccess("");
+    setEmail(""); setPassword(""); setConfirm("");
   }
 
-  // Show loading spinner while checking existing session
+  function switchMode(m) { setMode(m); clearForm(); }
+
+  // ── Email / Password auth ──────────────────────────
+  async function handleEmailAuth() {
+    setError(""); setSuccess("");
+
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter your email and password."); return;
+    }
+
+    if (mode === "signup") {
+      if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+      if (password !== confirm) { setError("Passwords do not match."); return; }
+    }
+
+    setLoading(true);
+
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setError(error.message === "Invalid login credentials"
+          ? "Wrong email or password. Please try again."
+          : error.message);
+        setLoading(false);
+      } else {
+        router.push("/auth/callback");
+      }
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email, password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+      } else {
+        setSuccess("✅ Account created! Check your email for a confirmation link, then sign in.");
+        setLoading(false);
+      }
+    }
+  }
+
+  // ── Google OAuth ───────────────────────────────────
+  async function handleGoogle() {
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) setError(error.message);
+  }
+
   if (checking) {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
-        <div style={{ fontSize: 48 }}>📚</div>
+      <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ fontSize:48 }}>📚</div>
       </div>
     );
   }
@@ -58,111 +108,142 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>Sign In — KitabBazar Nepal</title>
-        <meta name="description" content="Sign in to KitabBazar to buy and sell used books across Nepal." />
+        <title>{mode === "signin" ? "Sign In" : "Create Account"} — KitabSathi Nepal</title>
       </Head>
 
-      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
-        <div style={{ maxWidth: 420, margin: "0 auto", padding: "52px 20px 60px" }}>
-          <div style={{
-            background: C.cardBg, border: `1px solid ${C.border}`,
-            borderRadius: 20, padding: "36px 32px",
-          }}>
+      <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"system-ui, sans-serif" }}>
+        <div style={{ maxWidth:400, margin:"0 auto", padding:"48px 20px 60px" }}>
+          <div style={{ background:C.cardBg, border:`1px solid ${C.border}`, borderRadius:20, padding:"34px 30px" }}>
+
             {/* Logo */}
-            <div style={{ textAlign: "center", marginBottom: 26 }}>
-              <div style={{ fontSize: 44, marginBottom: 8 }}>📚</div>
-              <div style={{ fontWeight: 800, fontSize: 22, color: C.primary, letterSpacing: "-0.5px" }}>
-                KitabBazar
+            <div style={{ textAlign:"center", marginBottom:24 }}>
+              <div style={{ fontSize:42, marginBottom:8 }}>📚</div>
+              <div style={{ fontWeight:800, fontSize:22, color:C.primary, letterSpacing:"-0.5px" }}>
+                KitabSathi
               </div>
-              <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+              <div style={{ fontSize:13, color:C.muted, marginTop:3 }}>
                 Nepal's Used Book Marketplace
               </div>
             </div>
 
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
-                Sign in to your account
-              </div>
-              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                Sign in to buy or sell books.<br />Browsing is always free.
-              </div>
+            {/* Mode toggle tabs */}
+            <div style={{ display:"flex", background:C.bg, borderRadius:10, padding:4, marginBottom:22 }}>
+              {[["signin","Sign In"],["signup","Create Account"]].map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => switchMode(m)}
+                  style={{
+                    flex:1, padding:"8px", border:"none", borderRadius:7,
+                    fontSize:13, fontWeight:600, cursor:"pointer",
+                    background: mode === m ? C.navBg : "transparent",
+                    color:      mode === m ? C.primary : C.muted,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
-            {/* Error message */}
+            {/* Error / Success banners */}
             {error && (
-              <div style={{
-                background: "rgba(248,113,113,0.08)",
-                border: `1px solid ${C.error}40`,
-                borderRadius: 8, padding: "10px 14px",
-                fontSize: 13, color: C.error, marginBottom: 16,
-              }}>
+              <div style={{ background:"rgba(248,113,113,0.08)", border:`1px solid ${C.error}40`, borderRadius:8, padding:"10px 13px", fontSize:13, color:C.error, marginBottom:14 }}>
                 {error}
               </div>
             )}
+            {success && (
+              <div style={{ background:"rgba(74,222,128,0.08)", border:`1px solid ${C.success}40`, borderRadius:8, padding:"10px 13px", fontSize:13, color:C.success, marginBottom:14, lineHeight:1.6 }}>
+                {success}
+              </div>
+            )}
 
-            {/* Google Sign In button */}
+            {/* Email */}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:C.subtext, display:"block", marginBottom:6 }}>
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={mkInput(false)}
+                onKeyDown={e => e.key === "Enter" && handleEmailAuth()}
+              />
+            </div>
+
+            {/* Password */}
+            <div style={{ marginBottom: mode === "signup" ? 12 : 18 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:C.subtext, display:"block", marginBottom:6 }}>
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder={mode === "signup" ? "At least 6 characters" : "Your password"}
+                style={mkInput(false)}
+                onKeyDown={e => e.key === "Enter" && handleEmailAuth()}
+              />
+            </div>
+
+            {/* Confirm password — signup only */}
+            {mode === "signup" && (
+              <div style={{ marginBottom:18 }}>
+                <label style={{ fontSize:13, fontWeight:600, color:C.subtext, display:"block", marginBottom:6 }}>
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Re-enter your password"
+                  style={mkInput(false)}
+                  onKeyDown={e => e.key === "Enter" && handleEmailAuth()}
+                />
+              </div>
+            )}
+
+            {/* Submit button */}
             <button
-              onClick={handleGoogleSignIn}
+              onClick={handleEmailAuth}
               disabled={loading}
-              style={{
-                width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
-                background: "#fff", color: "#333",
-                border: "none", borderRadius: 12, padding: "13px 20px",
-                fontSize: 15, fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-                marginBottom: 16, opacity: loading ? 0.7 : 1,
-              }}
+              style={{ width:"100%", padding:"12px", background:C.primary, color:C.primaryDark, border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", opacity:loading?0.7:1, marginBottom:16 }}
             >
-              <span style={{ fontSize: 20, fontWeight: 800, color: "#4285F4", fontFamily: "serif" }}>
-                G
-              </span>
-              {loading ? "Redirecting to Google..." : "Continue with Google"}
+              {loading
+                ? (mode === "signin" ? "Signing in..." : "Creating account...")
+                : (mode === "signin" ? "Sign In" : "Create Account")
+              }
             </button>
 
-            <div style={{ borderTop: `1px solid ${C.border}`, margin: "0 0 20px" }} />
+            {/* Divider */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+              <div style={{ flex:1, height:1, background:C.border }} />
+              <div style={{ fontSize:12, color:C.muted }}>or</div>
+              <div style={{ flex:1, height:1, background:C.border }} />
+            </div>
+
+            {/* Google */}
+            <button
+              onClick={handleGoogle}
+              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:10, background:"#fff", color:"#333", border:"none", borderRadius:10, padding:"12px 20px", fontSize:14, fontWeight:600, cursor:"pointer", marginBottom:18 }}
+            >
+              <span style={{ fontSize:18, fontWeight:800, color:"#4285F4", fontFamily:"serif" }}>G</span>
+              Continue with Google
+            </button>
 
             {/* Browse without login */}
-            <div style={{
-              background: "rgba(76,201,232,0.05)",
-              border: `1px solid ${C.primary}25`,
-              borderRadius: 12, padding: "14px 16px", marginBottom: 22,
-            }}>
-              <div style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4 }}>
-                👀 Just browsing?
+            <div style={{ textAlign:"center", paddingTop:14, borderTop:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:12, color:C.muted, marginBottom:8 }}>
+                Just browsing? No account needed.
               </div>
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 10 }}>
-                You can explore all books without signing in.
-              </div>
-              <Link href="/browse" style={{
-                display: "block", textAlign: "center", padding: "9px",
-                background: C.bg, border: `1px solid ${C.border}`,
-                borderRadius: 8, fontSize: 13, fontWeight: 600,
-                color: C.primary, textDecoration: "none",
-              }}>
+              <Link href="/browse" style={{ fontSize:13, fontWeight:600, color:C.primary, textDecoration:"none" }}>
                 Browse Books Without Signing In →
               </Link>
             </div>
 
-            {/* What needs sign in */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, textAlign: "center" }}>
-                What requires sign in?
-              </div>
-              {[
-                ["✅", "Listing a book for sale"],
-                ["✅", "Contacting sellers directly"],
-                ["✅", "Saving books to wishlist"],
-                ["🚫", "Browsing all listings — free!"],
-              ].map(([icon, text]) => (
-                <div key={text} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted, padding: "4px 0" }}>
-                  <span>{icon}</span>{text}
-                </div>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 20, lineHeight: 1.6 }}>
-              By signing in, you agree to our Terms of Service and Privacy Policy.
+            <div style={{ fontSize:11, color:C.muted, textAlign:"center", marginTop:14, lineHeight:1.6 }}>
+              By signing in, you agree to our Terms of Service.
             </div>
           </div>
         </div>
