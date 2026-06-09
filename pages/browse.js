@@ -52,27 +52,34 @@ function BookCard({ book }){
   const saving = book.mrp>book.price&&book.mrp>0 ? Math.round(((book.mrp-book.price)/book.mrp)*100) : null;
   const emoji = getEmoji(book.category, book.subject);
   return (
-    <div style={{ background:C.cardBg, border:`1px solid ${C.border}`, borderRadius:12, padding:14, cursor:"pointer" }}>
-      <div style={{ fontSize:34, textAlign:"center", background:"#0D1117", borderRadius:8, padding:"10px 0", marginBottom:10 }}>{emoji}</div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-        <span style={{ fontSize:11, fontWeight:600, background:C.badgeBg, color:C.badgeText, borderRadius:4, padding:"2px 6px" }}>{book.grade||"General"}</span>
-        <span style={{ fontSize:11, fontWeight:600, color:condColor(book.condition) }}>{book.condition}</span>
+    <Link href={`/books/${book.id}`} style={{ textDecoration:"none", display:"block" }}>
+      <div style={{ background:C.cardBg, border:`1px solid ${C.border}`, borderRadius:12, padding:14, cursor:"pointer", transition:"border-color 0.15s" }}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=C.primary}
+        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+        <div style={{ fontSize:34, textAlign:"center", background:"#0D1117", borderRadius:8, padding:"10px 0", marginBottom:10 }}>{emoji}</div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+          <span style={{ fontSize:11, fontWeight:600, background:C.badgeBg, color:C.badgeText, borderRadius:4, padding:"2px 6px" }}>{book.grade||"General"}</span>
+          <span style={{ fontSize:11, fontWeight:600, color:condColor(book.condition) }}>{book.condition}</span>
+        </div>
+        <div style={{ fontWeight:700, fontSize:13, color:C.text, marginBottom:1, lineHeight:1.3 }}>{book.title}</div>
+        <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>by {book.author||"Unknown"}</div>
+        <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>📚 {book.subject||book.category}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:4 }}>
+          <span style={{ fontSize:15, fontWeight:800, color:C.primary }}>Rs. {book.price}</span>
+          {book.mrp>0&&<span style={{ fontSize:11, color:C.muted, textDecoration:"line-through" }}>Rs. {book.mrp}</span>}
+          {saving&&<span style={{ fontSize:10, fontWeight:600, background:C.saveBg, color:C.saveText, borderRadius:3, padding:"1px 5px" }}>{saving}% off</span>}
+        </div>
+        {book.negotiable&&<div style={{ fontSize:11, color:C.muted, marginBottom:5 }}>💬 Negotiable</div>}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontSize:11, color:C.muted }}>📍 {book.location}</span>
+          <button
+            onClick={e=>{e.preventDefault();e.stopPropagation();book.seller_phone&&window.open(`https://wa.me/977${book.seller_phone}?text=Hi! I saw "${book.title}" on KitabSathi. Is it available?`);}}
+            style={{ fontSize:11, fontWeight:600, background:"#25D366", color:"#fff", border:"none", borderRadius:6, padding:"4px 9px", cursor:"pointer" }}>
+            WhatsApp
+          </button>
+        </div>
       </div>
-      <div style={{ fontWeight:700, fontSize:13, color:C.text, marginBottom:1, lineHeight:1.3 }}>{book.title}</div>
-      <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>by {book.author||"Unknown"}</div>
-      <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>📚 {book.subject||book.category}</div>
-      <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:4 }}>
-        <span style={{ fontSize:15, fontWeight:800, color:C.primary }}>Rs. {book.price}</span>
-        {book.mrp>0&&<span style={{ fontSize:11, color:C.muted, textDecoration:"line-through" }}>Rs. {book.mrp}</span>}
-        {saving&&<span style={{ fontSize:10, fontWeight:600, background:C.saveBg, color:C.saveText, borderRadius:3, padding:"1px 5px" }}>{saving}% off</span>}
-      </div>
-      {book.negotiable&&<div style={{ fontSize:11, color:C.muted, marginBottom:5 }}>💬 Negotiable</div>}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:11, color:C.muted }}>📍 {book.location}</span>
-        <button onClick={()=>book.seller_phone&&window.open(`https://wa.me/977${book.seller_phone}?text=Hi! I saw your book "${book.title}" on KitabSathi. Is it available?`)}
-          style={{ fontSize:11, fontWeight:600, background:"#25D366", color:"#fff", border:"none", borderRadius:6, padding:"4px 9px", cursor:"pointer" }}>WhatsApp</button>
-      </div>
-    </div>
+    </Link>
   );
 }
 

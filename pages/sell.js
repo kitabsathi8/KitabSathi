@@ -1,7 +1,5 @@
-// pages/sell.js  —  Sell a Book (saves to Supabase)
-// ─────────────────────────────────────────────────────────────────
-
-import { useState } from "react";
+// pages/sell.js — checks profile completion before allowing listing
+import { useState, useEffect } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
@@ -52,11 +50,15 @@ function getEmoji(category, subject){
 function condColor(c){
   if(c==="Like New"||c==="Good") return C.condGood;
   if(c==="Fair") return C.condFair;
-  if(c==="Damaged") return C.condDamaged;
-  return C.muted;
+  return C.condDamaged;
 }
 
-const mkInput = (err) => ({ width:"100%", background:C.bg, border:`1.5px solid ${err?C.error:C.border}`, color:C.text, borderRadius:8, padding:"11px 14px", fontSize:14, outline:"none", fontFamily:"system-ui, sans-serif" });
+const mkInput = (err) => ({
+  width:"100%", background:C.bg,
+  border:`1.5px solid ${err?C.error:C.border}`,
+  color:C.text, borderRadius:8, padding:"11px 14px",
+  fontSize:14, outline:"none", fontFamily:"system-ui, sans-serif",
+});
 const LABEL = { fontSize:13, fontWeight:600, color:C.subtext, display:"block", marginBottom:6 };
 const REQ   = { color:C.error };
 const BTN_P = { flex:2, padding:"13px", background:C.primary, color:C.primaryDark, border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer" };
@@ -77,7 +79,7 @@ function Toggle({ checked, onChange, label, sublabel }){
 }
 
 function StepIndicator({ current }){
-  const steps=["Book Info","Condition & Price","Location & Photos"];
+  const steps=["Book Info","Condition & Price","Location & Publish"];
   return(
     <div style={{ display:"flex", alignItems:"center", marginBottom:28 }}>
       {steps.map((label,i)=>{
@@ -131,15 +133,50 @@ function PreviewCard({ form }){
 
 export default function SellPage(){
   const router = useRouter();
-  const [step,       setStep]       = useState(0);
-  const [errors,     setErrors]     = useState({});
-  const [publishing, setPublishing] = useState(false);
-  const [pubError,   setPubError]   = useState("");
+  const [authChecked, setAuthChecked] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [step,        setStep]        = useState(0);
+  const [errors,      setErrors]      = useState({});
+  const [publishing,  setPublishing]  = useState(false);
+  const [pubError,    setPubError]    = useState("");
   const [form, setForm] = useState({
     title:"", author:"", category:"Academic", grade:"", subject:"", genre:"",
-    condition:"", age:"", price:"", mrp:"", negotiable:false, exchange:false, description:"",
-    location:"Kathmandu", delivery:false, sellerName:"", sellerPhone:"",
+    condition:"", age:"", price:"", mrp:"", negotiable:false, exchange:false,
+    description:"", location:"Kathmandu", delivery:false,
   });
+
+  // ── Guard: must be logged in with complete profile ─────────────
+  useEffect(()=>{
+    async function checkAuth(){
+      const { data:{ user } } = await supabase.auth.getUser();
+      if(!user){ router.push("/login"); return; }
+
+      const { data: profile } = await supabase
+        .from("profiles").select("full_name, whatsapp")
+        .eq("id", user.id).single();
+
+      // If profile is missing name → send to setup first
+      if(!profile?.full_name){
+        router.push("/profile/setup"); return;
+      }
+
+      setCurrentUser(user);
+      setAuthChecked(true);
+    }
+    checkAuth();
+  },[router]);
+
+  // Show loading until auth is confirmed
+  if(!authChecked){
+    return(
+      <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"system-ui" }}>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>📚</div>
+          <div style={{ fontSize:14, color:C.muted }}>Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   function update(field, value){ setForm(p=>({...p,[field]:value})); if(errors[field]) setErrors(p=>({...p,[field]:false})); }
 
@@ -147,45 +184,36 @@ export default function SellPage(){
     const e={};
     if(s===0){ if(!form.title.trim()) e.title=true; if(!form.grade) e.grade=true; }
     if(s===1){ if(!form.condition) e.condition=true; if(!form.price) e.price=true; }
-    if(s===2){ if(!form.sellerPhone.trim()) e.sellerPhone=true; }
     setErrors(e); return Object.keys(e).length===0;
   }
 
   function next(){ if(validate(step)) setStep(s=>s+1); }
   function back(){ setStep(s=>s-1); setErrors({}); }
 
-  // ── Save listing to Supabase ───────────────────────────────────
   async function handlePublish(){
     if(!validate(2)) return;
-    setPublishing(true);
-    setPubError("");
+    setPublishing(true); setPubError("");
 
     const { error } = await supabase.from("books").insert({
       title:        form.title.trim(),
-      author:       form.author.trim() || null,
+      author:       form.author.trim()||null,
       category:     form.category,
-      grade:        form.grade || null,
-      subject:      form.subject.trim() || form.genre || null,
+      grade:        form.grade||null,
+      subject:      form.subject.trim()||form.genre||null,
       condition:    form.condition,
-      age:          form.age || null,
+      age:          form.age||null,
       price:        parseInt(form.price),
-      mrp:          form.mrp ? parseInt(form.mrp) : null,
+      mrp:          form.mrp?parseInt(form.mrp):null,
       negotiable:   form.negotiable,
       exchange:     form.exchange,
-      description:  form.description.trim() || null,
+      description:  form.description.trim()||null,
       location:     form.location,
       delivery:     form.delivery,
-      seller_name:  form.sellerName.trim() || null,
-      seller_phone: form.sellerPhone.trim(),
+      seller_id:    currentUser.id,           // ← links listing to user
     });
 
-    if(error){
-      setPubError(error.message);
-      setPublishing(false);
-    } else {
-      // Success — redirect to browse page
-      router.push("/browse");
-    }
+    if(error){ setPubError(error.message); setPublishing(false); }
+    else router.push("/my-listings");          // ← goes to my listings after publish
   }
 
   const savings = parseInt(form.mrp)>parseInt(form.price)&&form.price&&form.mrp ? parseInt(form.mrp)-parseInt(form.price) : null;
@@ -212,8 +240,8 @@ export default function SellPage(){
             {/* STEP 1 */}
             {step===0&&(
               <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                <div><label style={LABEL}>Book Title <span style={REQ}>*</span></label><input value={form.title} onChange={e=>update("title",e.target.value)} placeholder="e.g. Class 10 Science" style={mkInput(errors.title)} />{errors.title&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>Title is required</div>}</div>
-                <div><label style={LABEL}>Author</label><input value={form.author} onChange={e=>update("author",e.target.value)} placeholder="e.g. CDC Nepal, H.C. Verma" style={mkInput(false)} /></div>
+                <div><label style={LABEL}>Book Title <span style={REQ}>*</span></label><input value={form.title} onChange={e=>update("title",e.target.value)} placeholder="e.g. Class 10 Science" style={mkInput(errors.title)} />{errors.title&&<div style={{ fontSize:12,color:C.error,marginTop:4 }}>Title is required</div>}</div>
+                <div><label style={LABEL}>Author</label><input value={form.author} onChange={e=>update("author",e.target.value)} placeholder="e.g. CDC Nepal" style={mkInput(false)} /></div>
                 <div>
                   <label style={LABEL}>Category <span style={REQ}>*</span></label>
                   <div style={{ display:"flex", gap:10 }}>
@@ -225,9 +253,9 @@ export default function SellPage(){
                   </div>
                 </div>
                 {form.category==="Academic"?(
-                  <div><label style={LABEL}>Grade / Level <span style={REQ}>*</span></label><select value={form.grade} onChange={e=>update("grade",e.target.value)} style={{ ...mkInput(errors.grade), cursor:"pointer" }}><option value="">— Select Grade —</option>{ACADEMIC_GRADES.map(g=><option key={g}>{g}</option>)}</select>{errors.grade&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>Please select a grade</div>}</div>
+                  <div><label style={LABEL}>Grade / Level <span style={REQ}>*</span></label><select value={form.grade} onChange={e=>update("grade",e.target.value)} style={{ ...mkInput(errors.grade), cursor:"pointer" }}><option value="">— Select Grade —</option>{ACADEMIC_GRADES.map(g=><option key={g}>{g}</option>)}</select>{errors.grade&&<div style={{ fontSize:12,color:C.error,marginTop:4 }}>Please select a grade</div>}</div>
                 ):(
-                  <div><label style={LABEL}>Genre <span style={REQ}>*</span></label><select value={form.genre} onChange={e=>{update("genre",e.target.value);update("grade",e.target.value);}} style={{ ...mkInput(errors.grade), cursor:"pointer" }}><option value="">— Select Genre —</option>{NON_ACADEMIC_GENRES.map(g=><option key={g}>{g}</option>)}</select>{errors.grade&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>Please select a genre</div>}</div>
+                  <div><label style={LABEL}>Genre <span style={REQ}>*</span></label><select value={form.genre} onChange={e=>{update("genre",e.target.value);update("grade",e.target.value);}} style={{ ...mkInput(errors.grade), cursor:"pointer" }}><option value="">— Select Genre —</option>{NON_ACADEMIC_GENRES.map(g=><option key={g}>{g}</option>)}</select>{errors.grade&&<div style={{ fontSize:12,color:C.error,marginTop:4 }}>Please select a genre</div>}</div>
                 )}
                 {form.category==="Academic"&&<div><label style={LABEL}>Subject</label><input value={form.subject} onChange={e=>update("subject",e.target.value)} placeholder="e.g. Science, Mathematics, Physics" style={mkInput(false)} /></div>}
                 <button onClick={next} style={{ ...BTN_P, flex:"none", width:"100%", marginTop:4 }}>Continue to Step 2 →</button>
@@ -247,17 +275,17 @@ export default function SellPage(){
                       </div>
                     ))}
                   </div>
-                  {errors.condition&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>Please select the condition</div>}
+                  {errors.condition&&<div style={{ fontSize:12,color:C.error,marginTop:4 }}>Please select the condition</div>}
                 </div>
                 <div><label style={LABEL}>How old is the book?</label><select value={form.age} onChange={e=>update("age",e.target.value)} style={{ ...mkInput(false), cursor:"pointer" }}><option value="">— Select —</option><option>Less than 1 year</option><option>1–2 years</option><option>2–3 years</option><option>3+ years</option></select></div>
                 <div style={{ display:"flex", gap:12 }}>
-                  <div style={{ flex:1 }}><label style={LABEL}>Your Price (Rs.) <span style={REQ}>*</span></label><input type="number" value={form.price} onChange={e=>update("price",e.target.value)} placeholder="150" style={mkInput(errors.price)} />{errors.price&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>Price is required</div>}</div>
+                  <div style={{ flex:1 }}><label style={LABEL}>Your Price (Rs.) <span style={REQ}>*</span></label><input type="number" value={form.price} onChange={e=>update("price",e.target.value)} placeholder="150" style={mkInput(errors.price)} />{errors.price&&<div style={{ fontSize:12,color:C.error,marginTop:4 }}>Price is required</div>}</div>
                   <div style={{ flex:1 }}><label style={LABEL}>Original MRP (Rs.)</label><input type="number" value={form.mrp} onChange={e=>update("mrp",e.target.value)} placeholder="320" style={mkInput(false)} /></div>
                 </div>
                 {savings&&savings>0&&<div style={{ background:C.saveBg, border:`1px solid ${C.saveText}40`, borderRadius:8, padding:"10px 14px", fontSize:13, color:C.saveText, fontWeight:600 }}>Buyers save Rs. {savings} ({Math.round((savings/parseInt(form.mrp))*100)}% off) — great deal!</div>}
                 <Toggle checked={form.negotiable} onChange={()=>update("negotiable",!form.negotiable)} label="💬 Price Negotiable?" sublabel="Buyers can make you an offer" />
                 <Toggle checked={form.exchange} onChange={()=>update("exchange",!form.exchange)} label="🔄 Open to Book Exchange?" sublabel="Swap your book instead of cash" />
-                <div><label style={LABEL}>Description</label><textarea value={form.description} rows={4} onChange={e=>update("description",e.target.value)} placeholder="Describe the condition — highlights, missing pages, how long you used it..." style={{ ...mkInput(false), resize:"vertical", lineHeight:1.6 }} /></div>
+                <div><label style={LABEL}>Description</label><textarea value={form.description} rows={4} onChange={e=>update("description",e.target.value)} placeholder="Describe the condition, highlights, missing pages..." style={{ ...mkInput(false), resize:"vertical", lineHeight:1.6 }} /></div>
                 <div style={{ display:"flex", gap:10, marginTop:4 }}><button onClick={back} style={BTN_S}>← Back</button><button onClick={next} style={BTN_P}>Continue to Step 3 →</button></div>
               </div>
             )}
@@ -267,36 +295,20 @@ export default function SellPage(){
               <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
                 <div><label style={LABEL}>Your District <span style={REQ}>*</span></label><select value={form.location} onChange={e=>update("location",e.target.value)} style={{ ...mkInput(false), cursor:"pointer" }}>{DISTRICTS.map(d=><option key={d}>{d}</option>)}</select></div>
                 <Toggle checked={form.delivery} onChange={()=>update("delivery",!form.delivery)} label="🛵 Delivery Available?" sublabel="I can deliver within my city" />
-                <div>
-                  <label style={LABEL}>Your Name</label>
-                  <input value={form.sellerName} onChange={e=>update("sellerName",e.target.value)} placeholder="Your name (shown to buyers)" style={mkInput(false)} />
+                <div style={{ background:"rgba(76,201,232,0.05)", border:`1px solid ${C.primary}30`, borderRadius:10, padding:"12px 14px", fontSize:13, color:C.muted, lineHeight:1.7 }}>
+                  📱 Buyers will contact you on <span style={{ color:C.primary, fontWeight:600 }}>WhatsApp</span> from your profile. Make sure your number is up to date in your profile settings.
                 </div>
-                <div>
-                  <label style={LABEL}>Your WhatsApp Number <span style={REQ}>*</span></label>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <div style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"11px 12px", fontSize:14, color:C.muted, whiteSpace:"nowrap", flexShrink:0 }}>🇳🇵 +977</div>
-                    <input type="tel" value={form.sellerPhone} onChange={e=>update("sellerPhone",e.target.value.replace(/\D/g,"").slice(0,10))} placeholder="98XXXXXXXX" style={{ ...mkInput(errors.sellerPhone), flex:1 }} maxLength={10} />
-                  </div>
-                  {errors.sellerPhone&&<div style={{ fontSize:12, color:C.error, marginTop:4 }}>WhatsApp number is required — buyers will contact you here</div>}
-                </div>
-                <div style={{ border:`2px dashed ${C.border}`, borderRadius:12, padding:"28px 20px", textAlign:"center", background:C.navBg, cursor:"pointer" }}>
-                  <div style={{ fontSize:32, marginBottom:8 }}>📷</div>
-                  <div style={{ fontSize:14, color:C.subtext, fontWeight:600, marginBottom:4 }}>Photo upload — coming soon</div>
-                  <div style={{ fontSize:12, color:C.muted }}>We are adding photo support in the next update</div>
-                </div>
-                {pubError&&<div style={{ background:"rgba(248,113,113,0.1)", border:`1px solid ${C.error}40`, borderRadius:8, padding:"10px 14px", fontSize:13, color:C.error }}>{pubError}</div>}
+                {pubError&&<div style={{ background:"rgba(248,113,113,0.08)", border:`1px solid ${C.error}40`, borderRadius:8, padding:"10px 14px", fontSize:13, color:C.error }}>{pubError}</div>}
                 <div style={{ display:"flex", gap:10 }}>
                   <button onClick={back} style={BTN_S}>← Back</button>
                   <button onClick={handlePublish} disabled={publishing} style={{ ...BTN_P, opacity:publishing?0.7:1, cursor:publishing?"not-allowed":"pointer" }}>
                     {publishing?"Publishing...":"🚀 Publish Listing"}
                   </button>
                 </div>
-                <div style={{ fontSize:11, color:C.muted, textAlign:"center" }}>Your listing will be live on the Browse page instantly</div>
+                <div style={{ fontSize:11, color:C.muted, textAlign:"center" }}>Your listing goes live instantly on the Browse page</div>
               </div>
             )}
           </div>
-
-          {/* Live Preview */}
           <div style={{ width:260, flexShrink:0 }}><PreviewCard form={form} /></div>
         </div>
       </div>
