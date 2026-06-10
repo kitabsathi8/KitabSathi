@@ -130,6 +130,7 @@ export default function Home(){
         <meta name="description" content="KitabSathi — Nepal's marketplace for used academic and non-academic books. Buy and sell books from Grade 1 to Bachelor level." />
         <meta name="keywords" content="used books Nepal, buy books Nepal, sell books Nepal, second hand books Kathmandu, SEE books" />
         <link rel="icon" href="/favicon.ico" />
+        <meta name="google-site-verification" content="C8TX0NSHOrIEnX2kTK3Zpkzf1UAqTjLVBinquvDnd_E" />
       </Head>
 
       <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"system-ui, sans-serif" }}>
