@@ -77,34 +77,33 @@ export default function BookDetail(){
   const router   = useRouter();
   const { id }   = router.query;
 
-  const [book,    setBook]    = useState(null);
-  const [seller,  setSeller]  = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound,setNotFound]= useState(false);
+  const [book,       setBook]       = useState(null);
+  const [seller,     setSeller]     = useState(null);
+  const [currentUser,setCurrentUser]= useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [notFound,   setNotFound]   = useState(false);
+  const [marking,    setMarking]    = useState(false);
+  const [marked,     setMarked]     = useState("");
 
   useEffect(()=>{
     if(!id) return;
     async function fetchBook(){
-      // Fetch book
-      const { data: bookData, error } = await supabase
-        .from("books")
-        .select("*")
-        .eq("id", id)
-        .single();
+      // Fetch book + current user in parallel
+      const [{ data: bookData, error }, { data: { user } }] = await Promise.all([
+        supabase.from("books").select("*").eq("id", id).single(),
+        supabase.auth.getUser(),
+      ]);
 
       if(error || !bookData){ setNotFound(true); setLoading(false); return; }
       setBook(bookData);
+      setCurrentUser(user);
 
-      // Fetch seller profile if seller_id exists
       if(bookData.seller_id){
         const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name, whatsapp")
-          .eq("id", bookData.seller_id)
-          .single();
+          .from("profiles").select("full_name, whatsapp")
+          .eq("id", bookData.seller_id).single();
         if(profileData) setSeller(profileData);
       }
-
       setLoading(false);
     }
     fetchBook();
@@ -146,6 +145,9 @@ export default function BookDetail(){
     ? Math.round(((book.mrp - book.price) / book.mrp) * 100)
     : null;
 
+  // Is the logged-in user the seller of this book?
+  const isSeller = currentUser && book.seller_id === currentUser.id;
+
   // WhatsApp message — pre-filled
   const whatsappPhone   = seller?.whatsapp || book.seller_phone;
   const whatsappMessage = `Hi! I saw your book "${book.title}" listed on KitabSathi. Is it still available? 📚`;
@@ -176,10 +178,52 @@ export default function BookDetail(){
             ← Back to Browse
           </button>
 
-          {/* Sold banner */}
-          {book.sold && (
-            <div style={{ background:"#30363D", border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 18px", fontSize:14, fontWeight:700, color:C.muted, textAlign:"center", marginBottom:16, letterSpacing:1 }}>
-              THIS BOOK HAS BEEN SOLD
+          {/* ── Mark as Sold / Sold banner ───────────────── */}
+          {isSeller && (
+            <div style={{ background:C.cardBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:C.text }}>
+                  {book.sold ? "This book is marked as Sold" : "Is this book still available?"}
+                </div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
+                  {book.sold ? "Mark as available again if the deal fell through." : "Mark it as sold once you hand it over."}
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  setMarking(true);
+                  const newSold = !book.sold;
+                  await supabase.from("books").update({ sold: newSold }).eq("id", book.id);
+                  setBook(prev => ({ ...prev, sold: newSold }));
+                  setMarked(newSold ? "✅ Marked as sold!" : "↩️ Marked as available!");
+                  setTimeout(() => setMarked(""), 3000);
+                  setMarking(false);
+                }}
+                disabled={marking}
+                style={{ padding:"9px 16px", background: book.sold ? C.navBg : "rgba(74,222,128,0.12)", color: book.sold ? C.muted : C.saveText, border:`1px solid ${book.sold ? C.border : C.saveText+"50"}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}
+              >
+                {marking ? "Saving..." : book.sold ? "↩️ Mark Available" : "✅ Mark as Sold"}
+              </button>
+            </div>
+          )}
+
+          {/* Toast confirmation */}
+          {marked && (
+            <div style={{ background:"rgba(74,222,128,0.1)", border:"1px solid rgba(74,222,128,0.3)", borderRadius:8, padding:"10px 14px", fontSize:13, color:C.saveText, marginBottom:14 }}>
+              {marked}
+            </div>
+          )}
+
+          {/* Sold warning for buyers */}
+          {book.sold && !isSeller && (
+            <div style={{ background:"rgba(248,113,113,0.08)", border:`1px solid ${C.error}40`, borderRadius:10, padding:"14px 16px", marginBottom:16 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:C.error, marginBottom:4 }}>⚠️ This book has been sold</div>
+              <div style={{ fontSize:13, color:C.muted, lineHeight:1.6, marginBottom:10 }}>
+                The seller has marked this book as sold. You can still contact them in case the deal fell through, or browse other listings.
+              </div>
+              <Link href="/browse" style={{ fontSize:13, fontWeight:700, color:C.primary, textDecoration:"none" }}>
+                Browse similar books →
+              </Link>
             </div>
           )}
 
@@ -284,27 +328,42 @@ export default function BookDetail(){
               {/* Contact card */}
               <div style={{ background:C.cardBg, border:`1px solid ${C.border}`, borderRadius:14, padding:20, marginBottom:14 }}>
                 <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:14 }}>
-                  Contact Seller
+                  {isSeller ? "Your Listing" : "Contact Seller"}
                 </div>
 
-                {/* WhatsApp button */}
-                {whatsappUrl ? (
-                  <a
-                    href={whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%", padding:"13px", background:"#25D366", color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer", textDecoration:"none", marginBottom:10 }}
-                  >
-                    <span style={{ fontSize:18 }}>💬</span> Chat on WhatsApp
-                  </a>
-                ) : (
-                  <div style={{ background:C.navBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px", fontSize:13, color:C.muted, textAlign:"center", marginBottom:10 }}>
-                    Contact info not available
+                {/* Sold badge */}
+                {book.sold && (
+                  <div style={{ background:"#30363D", borderRadius:8, padding:"8px 12px", fontSize:13, fontWeight:700, color:C.muted, textAlign:"center", marginBottom:10, letterSpacing:0.5 }}>
+                    SOLD
                   </div>
                 )}
 
+                {/* Seller view — link to manage */}
+                {isSeller ? (
+                  <Link href="/my-listings" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%", padding:"11px", background:"rgba(76,201,232,0.1)", color:C.primary, border:`1px solid ${C.primary}40`, borderRadius:10, fontSize:13, fontWeight:700, textDecoration:"none", marginBottom:10 }}>
+                    📋 Manage My Listings
+                  </Link>
+                ) : (
+                  /* Buyer view — WhatsApp button */
+                  whatsappUrl ? (
+                    <a
+                      href={book.sold ? undefined : whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%", padding:"13px", background: book.sold ? "#30363D" : "#25D366", color: book.sold ? C.muted : "#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor: book.sold ? "not-allowed" : "pointer", textDecoration:"none", marginBottom:10, opacity: book.sold ? 0.6 : 1 }}
+                    >
+                      <span style={{ fontSize:18 }}>💬</span>
+                      {book.sold ? "Book already sold" : "Chat on WhatsApp"}
+                    </a>
+                  ) : (
+                    <div style={{ background:C.navBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px", fontSize:13, color:C.muted, textAlign:"center", marginBottom:10 }}>
+                      Contact info not available
+                    </div>
+                  )
+                )}
+
                 {/* Negotiable note */}
-                {book.negotiable && (
+                {book.negotiable && !book.sold && !isSeller && (
                   <div style={{ fontSize:12, color:C.muted, textAlign:"center", lineHeight:1.5 }}>
                     💬 Price is negotiable — feel free to make an offer!
                   </div>
