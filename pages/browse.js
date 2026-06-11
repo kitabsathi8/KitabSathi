@@ -1,6 +1,7 @@
 // pages/browse.js — KitabSathi
 import { useState, useEffect, useMemo } from "react";
 import Head from "next/head";
+import Link from "next/link";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
 
